@@ -66,10 +66,10 @@ $statuses = ['', 'new', 'negotiation', 'in_progress', 'review', 'done', 'cancell
                     <?php [$sl, $sc] = Labels::get(Labels::ORDER_STATUS, $o['status']); ?>
                     <?php [$pl, $pc] = Labels::get(Labels::PAYMENT_STATUS, $o['payment_status']); ?>
                     <?php $overdue = $o['due_at'] && strtotime($o['due_at']) < time() && !in_array($o['status'], ['done','cancelled']); ?>
-                    <tr class="table-row<?= $overdue ? ' table-row--warn' : '' ?>">
+                    <tr class="table-row<?= $overdue ? ' table-row--warn' : '' ?>" data-order-id="<?= $o['id'] ?>" style="cursor:pointer">
                         <td><span class="mono"><?= $e($o['number']) ?></span></td>
                         <td>
-                            <a href="/orders/<?= $o['id'] ?>" class="table-link"><?= $e($o['title']) ?></a>
+                            <span class="table-link" data-panel><?= $e($o['title']) ?></span>
                             <?php if ($o['tags']): ?>
                                 <div class="tag-list">
                                     <?php foreach (explode(',', $o['tags']) as $tag): ?>

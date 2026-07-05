@@ -75,7 +75,7 @@ final class CabinetController extends Controller
     public function index(Request $request, array $params = []): void
     {
         $client = $this->requireClient();
-        $orders = Order::paginate(['client_id' => $client['id']], 50);
+        $orders = Order::paginate(['client_id' => $client['client_id']], 50);
 
         $this->renderCabinet('cabinet/index', [
             'title'  => 'Мои заказы',
@@ -88,7 +88,7 @@ final class CabinetController extends Controller
     public function orderView(Request $request, array $params = []): void
     {
         $client = $this->requireClient();
-        $order  = $this->findClientOrder((int)($params['id'] ?? 0), (int)$client['id']);
+        $order  = $this->findClientOrder((int)($params['id'] ?? 0), (int)$client['client_id']);
 
         $messages = OrderMessage::forOrderAndClient((int)$order['id'], (int)$client['id']);
         $messages = array_map(fn($m) => array_merge($m, [
@@ -111,7 +111,7 @@ final class CabinetController extends Controller
     {
         $this->requireCsrfCabinet($request);
         $client  = $this->requireClient();
-        $order   = $this->findClientOrder((int)($params['id'] ?? 0), (int)$client['id']);
+        $order   = $this->findClientOrder((int)($params['id'] ?? 0), (int)$client['client_id']);
         $orderId = (int)$order['id'];
 
         $body = mb_substr(trim($request->input('body', '')), 0, 4000);
@@ -124,7 +124,7 @@ final class CabinetController extends Controller
         if ($body !== '') {
             $msgId = OrderMessage::create([
                 'order_id'    => $orderId,
-                'client_id'   => (int)$client['id'],
+                'client_id'   => (int)$client['client_id'],
                 'from_client' => 1,
                 'sender_id'   => null,
                 'body'        => $body,
@@ -133,7 +133,7 @@ final class CabinetController extends Controller
 
         if (!empty($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
             try {
-                OrderFile::upload($_FILES['file'], $orderId, (int)$client['id'], $msgId, null, true);
+                OrderFile::upload($_FILES['file'], $orderId, (int)$client['client_id'], $msgId, null, true);
             } catch (\RuntimeException) {
                 // не прерываем, просто пропускаем невалидный файл
             }
@@ -148,7 +148,7 @@ final class CabinetController extends Controller
         $client = $this->requireClient();
         $file   = OrderFile::find((int)($params['id'] ?? 0));
 
-        if (!$file || (int)$file['client_id'] !== (int)$client['id']) {
+        if (!$file || (int)$file['client_id'] !== (int)$client['client_id']) {
             http_response_code(403);
             echo 'Доступ запрещён.';
             exit;
@@ -190,7 +190,13 @@ final class CabinetController extends Controller
 
     private function findClientOrder(int $orderId, int $clientId): array
     {
-        $orders = Order::paginate(['client_id' => $clientId], 200);
+        $db = \App\Core\Database::instance();
+        $o  = $db->first(
+            'SELECT o.*, c.name AS client_name FROM orders o LEFT JOIN clients c ON c.id = o.client_id WHERE o.id = ? AND o.client_id = ?',
+            [$orderId, $clientId]
+        );
+        if ($o) return $o;
+        $orders = [];
         foreach ($orders as $o) {
             if ((int)$o['id'] === $orderId) return $o;
         }
