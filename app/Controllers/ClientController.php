@@ -6,10 +6,12 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Controller;
+use App\Core\Database;
 use App\Core\Flash;
 use App\Core\Request;
 use App\Models\ActivityLog;
 use App\Models\Client;
+use App\Models\ClientCredential;
 use App\Models\Order;
 
 final class ClientController extends Controller
@@ -53,20 +55,60 @@ final class ClientController extends Controller
 
     public function show(Request $request, array $params = []): void
     {
-        $client  = $this->findClient((int) ($params['id'] ?? 0));
-        $summary = Client::summary((int) $client['id']);
-        $orders  = Order::paginate(['client_id' => $client['id']], 30);
-        $contacts = $client['type'] === 'company'
+        $client     = $this->findClient((int) ($params['id'] ?? 0));
+        $summary    = Client::summary((int) $client['id']);
+        $orders     = Order::paginate(['client_id' => $client['id']], 30);
+        $contacts   = $client['type'] === 'company'
             ? Client::contactsOf((int) $client['id'])
             : [];
+        $credential = ClientCredential::find((int) $client['id']);
 
         $this->render('clients/show', [
-            'title'    => $client['name'],
-            'client'   => $client,
-            'summary'  => $summary,
-            'orders'   => $orders,
-            'contacts' => $contacts,
+            'title'      => $client['name'],
+            'client'     => $client,
+            'summary'    => $summary,
+            'orders'     => $orders,
+            'contacts'   => $contacts,
+            'credential' => $credential,
         ]);
+    }
+
+    public function setCabinet(Request $request, array $params = []): void
+    {
+        $this->requireCsrf($request);
+        $client   = $this->findClient((int) ($params['id'] ?? 0));
+        $id       = (int) $client['id'];
+        $login    = trim($request->input('cab_login', ''));
+        $password = $request->input('cab_password', '');
+
+        if ($login === '') {
+            Flash::error('Укажите логин для кабинета.');
+            $this->redirect("/clients/{$id}");
+        }
+
+        if (ClientCredential::loginExists($login, $id)) {
+            Flash::error('Этот логин уже занят другим клиентом.');
+            $this->redirect("/clients/{$id}");
+        }
+
+        $existing = ClientCredential::find($id);
+        if ($existing && $password === '') {
+            // Обновляем только логин
+            Database::instance()->run(
+                'UPDATE client_credentials SET login = ? WHERE client_id = ?',
+                [$login, $id]
+            );
+        } else {
+            if ($password === '') {
+                Flash::error('Введите пароль.');
+                $this->redirect("/clients/{$id}");
+            }
+            ClientCredential::upsert($id, $login, $password);
+        }
+
+        ActivityLog::record('client_cabinet', 'client', $id, "Установлен/обновлён доступ к кабинету");
+        Flash::success('Доступ к кабинету сохранён.');
+        $this->redirect("/clients/{$id}");
     }
 
     public function edit(Request $request, array $params = []): void

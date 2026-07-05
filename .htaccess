@@ -1,0 +1,15 @@
+Options -Indexes
+RewriteEngine On
+
+# Deny access to sensitive files
+RewriteRule ^(config|database|app)/.*$ - [F,L]
+RewriteRule ^\..*$ - [F,L]
+
+# Static assets
+RewriteCond %{REQUEST_URI} ^/assets/
+RewriteRule ^assets/(.*)$ public/assets/$1 [L]
+
+# All requests go to index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [L]

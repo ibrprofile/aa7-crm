@@ -51,6 +51,18 @@ return static function (Router $router): void {
         $router->post('/settings/profile', 'SettingsController@updateProfile');
         $router->post('/settings/password', 'SettingsController@updatePassword');
 
+            // Управление доступом кабинета клиента
+        $router->post('/clients/{id}/cabinet', 'ClientController@setCabinet');
+
+        // API для AJAX-панели заказа
+        $router->get('/api/orders/{id}/panel',    'ApiOrderController@panel');
+        $router->post('/api/orders/{id}/status',  'ApiOrderController@status');
+        $router->post('/api/orders/{id}/comment', 'ApiOrderController@comment');
+        $router->get('/api/orders/{id}/files',    'ApiOrderController@listFiles');
+        $router->post('/api/orders/{id}/files',   'ApiOrderController@uploadFile');
+        $router->get('/api/orders/{id}/messages', 'ApiOrderController@messages');
+        $router->post('/api/orders/{id}/messages','ApiOrderController@sendMessage');
+
         $router->group(['App\Core\AdminMiddleware'], static function (Router $router): void {
             $router->get('/team', 'TeamController@index');
             $router->post('/team', 'TeamController@store');
@@ -59,4 +71,13 @@ return static function (Router $router): void {
             $router->get('/team/logs', 'TeamController@logs');
         });
     });
+
+    // Кабинет клиента — не требует CRM-авторизации
+    $router->get('/cabinet/login',              'CabinetController@loginForm');
+    $router->post('/cabinet/login',             'CabinetController@login');
+    $router->post('/cabinet/logout',            'CabinetController@logout');
+    $router->get('/cabinet',                    'CabinetController@index');
+    $router->get('/cabinet/orders/{id}',        'CabinetController@orderView');
+    $router->post('/cabinet/orders/{id}/message', 'CabinetController@sendMessage');
+    $router->get('/cabinet/files/{id}/download', 'CabinetController@downloadFile');
 };

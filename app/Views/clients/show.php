@@ -183,5 +183,52 @@ $e = fn($v) => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
             </div>
         </div>
         <?php endif; ?>
+
+        <!-- Кабинет клиента -->
+        <div class="card">
+            <div class="card__section">
+                <h3 class="card__section-title">Кабинет клиента</h3>
+                <?php if (!empty($credential)): ?>
+                    <div style="margin-bottom:14px">
+                        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg-surface);border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:8px">
+                            <?= Icon::render('user', 14) ?>
+                            <span style="font-size:13px;font-weight:600"><?= $e($credential['login']) ?></span>
+                            <a href="/cabinet/login" target="_blank" class="btn btn--ghost btn--sm" style="margin-left:auto">
+                                <?= Icon::render('external-link', 13) ?> Открыть
+                            </a>
+                        </div>
+                        <?php if ($credential['last_login_at']): ?>
+                            <p style="font-size:12px;color:var(--text-muted)">Последний вход: <?= \App\Support\Format::date($credential['last_login_at'], 'd.m.Y H:i') ?></p>
+                        <?php else: ?>
+                            <p style="font-size:12px;color:var(--text-muted)">Ещё не заходил</p>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
+                <form method="post" action="/clients/<?= $client['id'] ?>/cabinet">
+                    <input type="hidden" name="_csrf" value="<?= $e($_csrf) ?>">
+                    <div class="field-row" style="margin-bottom:10px">
+                        <div class="field">
+                            <label class="field__label">Логин</label>
+                            <input type="text" name="cab_login" class="field__input" required
+                                   value="<?= $e($credential['login'] ?? '') ?>" placeholder="Логин для входа" autocomplete="off">
+                        </div>
+                        <div class="field">
+                            <label class="field__label"><?= !empty($credential) ? 'Новый пароль' : 'Пароль' ?></label>
+                            <div class="field__wrap">
+                                <input type="password" name="cab_password" class="field__input"
+                                       <?= empty($credential) ? 'required' : '' ?>
+                                       placeholder="<?= !empty($credential) ? 'Оставьте пустым чтобы не менять' : 'Установить пароль' ?>" autocomplete="new-password">
+                                <button type="button" class="field__toggle-pw" data-role="toggle-pw">
+                                    <?= Icon::render('eye', 14) ?>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn--primary btn--sm">
+                        <?= Icon::render('save', 14) ?> <?= !empty($credential) ? 'Сохранить' : 'Создать доступ' ?>
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>

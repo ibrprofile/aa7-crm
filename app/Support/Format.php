@@ -59,6 +59,13 @@ final class Format
         return "$n $many";
     }
 
+    public static function fileSize(int $bytes): string
+    {
+        if ($bytes >= 1_048_576) return round($bytes / 1_048_576, 1) . ' МБ';
+        if ($bytes >= 1_024)    return round($bytes / 1_024) . ' КБ';
+        return $bytes . ' Б';
+    }
+
     public static function initials(string $name): string
     {
         $parts = preg_split('/\s+/', trim($name));
