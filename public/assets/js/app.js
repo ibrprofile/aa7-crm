@@ -151,6 +151,7 @@
       <div class="side-panel__tabs">
         <button class="panel-tab is-active" data-panel-tab="info">Информация</button>
         <button class="panel-tab" data-panel-tab="activity">Активность</button>
+        <button class="panel-tab" data-panel-tab="chat">Чат</button>
         <button class="panel-tab" data-panel-tab="pay">Оплата</button>
       </div>
       <div class="side-panel__body" id="op-body">
@@ -169,12 +170,16 @@
         panel.querySelectorAll('[data-panel-pane]').forEach(p => {
           p.style.display = p.dataset.panelPane === pane ? '' : 'none';
         });
+        if (pane === 'chat') {
+          initPanelChat(panel.dataset.orderId);
+        }
       });
     });
   }
 
   function loadOrderPanel(orderId) {
     buildOrderPanel();
+    panelChatLoaded = false;
     const panel = document.getElementById('order-panel');
     const body  = document.getElementById('op-body');
     const link  = document.getElementById('op-open-link');
@@ -238,6 +243,9 @@
         </div>
       </div>`).join('') || '<p class="muted" style="padding:12px 20px">Платежей нет</p>';
 
+    const panel = document.getElementById('order-panel');
+    if (panel) panel.dataset.orderId = orderId;
+
     document.getElementById('op-body').innerHTML = `
       <div data-panel-pane="info">
         <div class="panel-section">
@@ -271,6 +279,23 @@
             <button class="btn btn--primary btn--sm" id="op-comment-send">${svgSend()}</button>
           </div>
           <div class="event-feed" id="op-events">${eventsHtml}</div>
+        </div>
+      </div>
+      <div data-panel-pane="chat" style="display:none;height:calc(100vh - 130px)">
+        <div class="panel-chat" id="panel-chat-wrap">
+          <div class="panel-chat__messages" id="panel-chat-messages">
+            <div style="display:flex;align-items:center;justify-content:center;height:80px"><div class="spinner"></div></div>
+          </div>
+          <form class="panel-chat__form" id="panel-chat-form" enctype="multipart/form-data">
+            <div class="panel-chat__row">
+              <label class="panel-chat__attach" title="Прикрепить файл">
+                <input type="file" id="panel-chat-file" style="display:none" name="file">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </label>
+              <textarea id="panel-chat-textarea" class="panel-chat__textarea" rows="1" placeholder="Написать клиенту…"></textarea>
+              <button type="submit" class="panel-chat__send" aria-label="Отправить">${svgSend()}</button>
+            </div>
+          </form>
         </div>
       </div>
       <div data-panel-pane="pay" style="display:none">
@@ -351,6 +376,100 @@
         loadOrderPanel(trigger.dataset.orderId);
       });
     });
+  }
+
+  /* ── Panel chat (CRM side-panel) ────────── */
+  let panelChatLoaded = false;
+
+  function initPanelChat(orderId) {
+    if (!orderId) return;
+    const msgs    = document.getElementById('panel-chat-messages');
+    const form    = document.getElementById('panel-chat-form');
+    const ta      = document.getElementById('panel-chat-textarea');
+    if (!msgs) return;
+
+    if (!panelChatLoaded) {
+      panelChatLoaded = true;
+      fetch(`/api/orders/${orderId}/messages`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      })
+        .then(r => r.ok ? r.json() : [])
+        .then(messages => {
+          if (!messages.length) {
+            msgs.innerHTML = '<div class="panel-chat__empty">Сообщений пока нет.</div>';
+            return;
+          }
+          msgs.innerHTML = messages.map(m => buildMsgBubble(m)).join('');
+          msgs.scrollTop = msgs.scrollHeight;
+        })
+        .catch(() => { msgs.innerHTML = '<div class="panel-chat__empty">Ошибка загрузки.</div>'; });
+    }
+
+    if (ta) {
+      ta.addEventListener('input', function () {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+      });
+      ta.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing && e.keyCode !== 229) {
+          e.preventDefault();
+          form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        }
+      });
+    }
+
+    if (form && !form.dataset.bound) {
+      form.dataset.bound = '1';
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        const text = ta?.value.trim() || '';
+        const fileInput = document.getElementById('panel-chat-file');
+        if (!text && !fileInput?.files?.length) return;
+
+        const fd = new FormData();
+        fd.append('_csrf', csrf());
+        fd.append('body', text);
+        if (fileInput?.files?.length) fd.append('file', fileInput.files[0]);
+
+        if (ta) ta.disabled = true;
+        fetch(`/api/orders/${orderId}/messages`, {
+          method: 'POST',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          body: fd
+        })
+          .then(r => r.ok ? r.json() : Promise.reject())
+          .then(msg => {
+            if (ta) { ta.value = ''; ta.style.height = ''; ta.disabled = false; }
+            if (fileInput) fileInput.value = '';
+            const el = document.createElement('div');
+            el.innerHTML = buildMsgBubble(msg);
+            msgs.append(el.firstElementChild);
+            msgs.scrollTop = msgs.scrollHeight;
+          })
+          .catch(() => { if (ta) ta.disabled = false; showToast('Ошибка отправки', 'error'); });
+      });
+    }
+  }
+
+  function buildMsgBubble(m) {
+    const isRight = !m.from_client;
+    const filesHtml = (m.files || []).map(f =>
+      `<a class="chat-msg__file" href="/uploads/${f.stored_name}" download="${f.original_name}">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        ${f.original_name}
+      </a>`
+    ).join('');
+    const avatar = isRight ? '' :
+      `<span class="chat-msg__avatar" style="background:${m.sender_color||'#6366f1'}">${(m.sender_name||'A')[0]}</span>`;
+    return `<div class="chat-msg ${isRight ? 'chat-msg--right' : ''}">
+      ${avatar}
+      <div class="chat-msg__bubble">
+        ${!isRight && m.sender_name ? `<div class="chat-msg__name">${m.sender_name}</div>` : ''}
+        ${m.body ? `<div class="chat-msg__text">${m.body.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>` : ''}
+        ${filesHtml ? `<div class="chat-msg__files">${filesHtml}</div>` : ''}
+        <div class="chat-msg__time">${m.created_at}</div>
+      </div>
+    </div>`;
   }
 
   /* ── Toggle password ─────────────────────── */
